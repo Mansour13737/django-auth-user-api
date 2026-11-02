@@ -7,6 +7,8 @@ from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
 
 User = get_user_model()
 
@@ -92,3 +94,12 @@ class VerifyEmailView(APIView):
                 {"error": "Invalid or expired verification token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class LoginView(TokenObtainPairView):
+    """
+    Takes an email and password and returns a JWT access and refresh token.
+    """
+
+    # 🔗 Remember Section 01, §1.2.11: Swap the default serializer with our secure one
+    serializer_class = CustomTokenObtainPairSerializer

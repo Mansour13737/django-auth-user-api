@@ -1,5 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import authenticate
+from rest_framework.exceptions import AuthenticationFailed
 
 User = get_user_model()
 
@@ -53,3 +56,45 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
 
         return user
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        email = attrs.get("email")
+        password = attrs.get("password")
+
+        if email and password:
+            email = email.lower()
+
+            # 🔹 NEW: Check if the user exists and check their status BEFORE authenticate()
+            from django.contrib.auth import get_user_model
+
+            User = get_user_model()
+            user_obj = User.objects.filter(email=email).first()
+
+            if user_obj and user_obj.check_password(password):
+                # 🔗 Remember Section 02, §2.1.1: Security checks
+                if not user_obj.is_email_verified:
+                    raise AuthenticationFailed(
+                        "Please verify your email before logging in."
+                    )
+                if not user_obj.is_active:
+                    raise AuthenticationFailed("This account is inactive.")
+
+            # Now let Django do the official authentication
+            user = authenticate(
+                request=self.context.get("request"), email=email, password=password
+            )
+
+            # 🔗 Remember Section 01, §1.2.12: Generic message for wrong email/password
+            if not user:
+                raise AuthenticationFailed("Invalid email or password.")
+
+            refresh = self.get_token(user)
+            data = {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+            }
+            return data
+
+        raise AuthenticationFailed("Must include 'email' and 'password'.")
