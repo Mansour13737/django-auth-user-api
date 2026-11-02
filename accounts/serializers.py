@@ -98,3 +98,22 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             return data
 
         raise AuthenticationFailed("Must include 'email' and 'password'.")
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        # 🔗 Remember Section 01, §1.6: Explicitly list safe fields.
+        # NEVER use fields = '__all__' on a user model!
+        fields = [
+            "id",
+            "email",
+            "full_name",
+            "role",
+            "is_email_verified",
+            "date_joined",
+        ]
+
+        # 🔗 Remember Section 02, §2.7.2: Role is app-level.
+        # Make it read-only so users can't promote themselves to ADMIN via this endpoint.
+        read_only_fields = ["id", "email", "role", "is_email_verified", "date_joined"]

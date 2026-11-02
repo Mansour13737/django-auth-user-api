@@ -145,6 +145,18 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
 }
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        # 🔗 Remember Section 01, §1.2.4: Tell DRF to use JWT for authentication
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+}
+
+MAILERS = {
+    "default": {
+        "BACKEND": "django.core.mail.backends.console.EmailBackend",
+    },
+}
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

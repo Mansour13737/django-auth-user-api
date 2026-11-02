@@ -9,6 +9,9 @@ from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
+from rest_framework.generics import RetrieveUpdateAPIView
+from rest_framework.permissions import IsAuthenticated
+from .serializers import UserProfileSerializer
 
 User = get_user_model()
 
@@ -103,3 +106,23 @@ class LoginView(TokenObtainPairView):
 
     # 🔗 Remember Section 01, §1.2.11: Swap the default serializer with our secure one
     serializer_class = CustomTokenObtainPairSerializer
+
+
+class UserProfileView(RetrieveUpdateAPIView):
+    """
+    View and update the authenticated user's profile.
+    """
+
+    serializer_class = UserProfileSerializer
+
+    # 🔗 Remember Section 01, §1.2.2: Authentication.
+    # This forces the user to send a valid Bearer Access Token in the headers.
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        """
+        🔗 Remember Section 01, §1.2.13: Object-level permission.
+        We override this to ALWAYS return the profile of the user making the request.
+        This prevents User A from changing the ID in the URL to view User B's data.
+        """
+        return self.request.user
