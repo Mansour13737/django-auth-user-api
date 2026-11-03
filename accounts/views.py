@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from .serializers import PasswordChangeSerializer
+from .serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
 
 User = get_user_model()
 
@@ -152,6 +153,67 @@ class PasswordChangeView(APIView):
             serializer.save()
             return Response(
                 {"message": "Password updated successfully."}, status=status.HTTP_200_OK
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetRequestView(APIView):
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data["email"]
+
+            # 🔹 Check if user exists, but DO NOT reveal this to the client
+            try:
+                user = User.objects.get(email=email)
+
+                # 🔗 Remember Section 01, §1.2.15: Generate signed token
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+
+                reset_link = (
+                    f"http://localhost:3000/reset-password?uid={uid}&token={token}"
+                )
+
+                # Print to terminal for easy testing
+                print(
+                    f"\n--- COPY THIS LINK TO RESET ---\n{reset_link}\n-------------------------------\n"
+                )
+
+                send_mail(
+                    subject="Password Reset Request",
+                    message=f"Click the link to reset your password: {reset_link}",
+                    from_email="noreply@auth-api.com",
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except User.DoesNotExist:
+                pass  # Do nothing. We don't want to leak that the email doesn't exist.
+
+            # 🔗 Remember Section 01, §1.2.12: Always return the same generic message
+            return Response(
+                {
+                    "message": "If an account with that email exists, a password reset link has been sent."
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetConfirmView(APIView):
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+
+        if serializer.is_valid():
+            # The serializer's save() method hashes the password and updates the user
+            serializer.save()
+            return Response(
+                {
+                    "message": "Password has been reset successfully. You can now log in."
+                },
+                status=status.HTTP_200_OK,
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

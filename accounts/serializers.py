@@ -1,9 +1,11 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from django.contrib.auth import authenticate
-from rest_framework.exceptions import AuthenticationFailed
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
+from django.contrib.auth.tokens import default_token_generator  # 🔹 Add this!
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework.exceptions import AuthenticationFailed
 
 User = get_user_model()
 
@@ -169,3 +171,55 @@ class PasswordChangeSerializer(serializers.Serializer):
         user.save()
 
         return user
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+    def validate_email(self, value):
+        # 🔗 Remember Section 02, §2.3: Normalize email
+        return value.lower()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(required=True)
+    token = serializers.CharField(required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
+    new_password_confirm = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        uidb64 = attrs.get("uid")
+        token = attrs.get("token")
+
+        # 1. Decode the UID and find the user
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            # 🔗 Remember Section 01, §1.6: Generic error to prevent enumeration
+            raise serializers.ValidationError({"error": "Invalid reset link."})
+
+        # 2. Validate the token
+        # 🔗 Remember Section 01, §1.2.15: The token is time-limited and signed
+        if not default_token_generator.check_token(user, token):
+            raise serializers.ValidationError({"error": "Invalid or expired token."})
+
+        # 3. Check that new passwords match
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password": "Passwords do not match."}
+            )
+
+        # 4. Validate password strength
+        validate_password(attrs["new_password"], user)
+
+        # Save the user in the serializer context to use in the save() method
+        self.user = user
+        return attrs
+
+    def save(self, **kwargs):
+        # 🔗 Remember Section 01, §1.2.3: Hash the new password securely
+        password = self.validated_data["new_password"]
+        self.user.set_password(password)
+        self.user.save()
+        return self.user
