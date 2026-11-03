@@ -12,6 +12,11 @@ from .serializers import CustomTokenObtainPairSerializer
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 from .serializers import UserProfileSerializer
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from .serializers import PasswordChangeSerializer
 
 User = get_user_model()
 
@@ -126,3 +131,27 @@ class UserProfileView(RetrieveUpdateAPIView):
         This prevents User A from changing the ID in the URL to view User B's data.
         """
         return self.request.user
+
+
+class PasswordChangeView(APIView):
+    """
+    Allow an authenticated user to change their password.
+    """
+
+    # 🔗 Remember Section 01, §1.2.2: Only authenticated users can access this
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(
+            data=request.data,
+            # 🔗 Remember Section 01, §1.2.11: We pass the request context so the serializer can access request.user
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Password updated successfully."}, status=status.HTTP_200_OK
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

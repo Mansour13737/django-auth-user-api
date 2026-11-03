@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
 from rest_framework.exceptions import AuthenticationFailed
+from django.contrib.auth.password_validation import validate_password
 
 User = get_user_model()
 
@@ -117,3 +118,54 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # 🔗 Remember Section 02, §2.7.2: Role is app-level.
         # Make it read-only so users can't promote themselves to ADMIN via this endpoint.
         read_only_fields = ["id", "email", "role", "is_email_verified", "date_joined"]
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
+    new_password_confirm = serializers.CharField(write_only=True, required=True)
+
+    def validate_old_password(self, value):
+        """
+        Check that the old password is correct.
+        """
+        user = self.context["request"].user
+        # 🔗 Remember Section 01, §1.2.3: Use Django's check_password, never compare strings!
+        if not user.check_password(value):
+            raise serializers.ValidationError(
+                "Your old password was entered incorrectly. Please enter it again."
+            )
+        return value
+
+    def validate_new_password(self, value):
+        """
+        Check that the new password meets Django's security requirements.
+        """
+        user = self.context["request"].user
+        # 🔗 Remember Section 01, §1.6: Trust user input without validation is a mistake.
+        # This applies Django's built-in validators (length, common passwords, numeric-only, etc.)
+        validate_password(value, user)
+        return value
+
+    def validate(self, attrs):
+        """
+        Check that the two new password fields match.
+        """
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password": "The two password fields didn't match."}
+            )
+        return attrs
+
+    def save(self, **kwargs):
+        """
+        Set the new password and save the user.
+        """
+        password = self.validated_data["new_password"]
+        user = self.context["request"].user
+
+        # 🔗 Remember Section 01, Security Rule #1: Hash the new password securely
+        user.set_password(password)
+        user.save()
+
+        return user
