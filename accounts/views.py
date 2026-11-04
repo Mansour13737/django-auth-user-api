@@ -18,6 +18,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from .serializers import PasswordChangeSerializer
 from .serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 User = get_user_model()
 
@@ -217,3 +219,40 @@ class PasswordResetConfirmView(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LogoutView(APIView):
+    """
+    Blacklist the refresh token to log the user out.
+    """
+
+    # 🔗 Remember Section 01, §1.2.2: Only logged-in users can log out
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # 1. Get the refresh token from the request body
+            refresh_token = request.data.get("refresh")
+            if not refresh_token:
+                return Response(
+                    {"error": "Refresh token is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # 2. Instantiate the token and blacklist it
+            # 🔗 Remember Section 01, §1.2.9: This adds the token to the BlacklistedToken table
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            # 🔗 Remember Section 01, Security Rule #9: 205 Reset Content is standard for logout
+            return Response(
+                {"message": "Successfully logged out."},
+                status=status.HTTP_205_RESET_CONTENT,
+            )
+
+        except TokenError:
+            # 🔗 Remember Section 01, §1.2.15: Token is invalid, expired, or already blacklisted
+            return Response(
+                {"error": "Invalid or expired token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
