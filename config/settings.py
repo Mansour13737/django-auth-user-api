@@ -147,9 +147,20 @@ SIMPLE_JWT = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        # 🔗 Remember Section 01, §1.2.4: Tell DRF to use JWT for authentication
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # 🔗 Remember Project Prompt §3: Brute-force protection via Rate Limiting
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    # 🔹 Define the limits
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "20/minute",  # Max 20 requests per minute for anonymous users
+        "user": "1000/day",  # Max 1000 requests per day for logged-in users
+        "login": "5/minute",  # 🔹 Custom rate for login (5 attempts per minute)
+        "register": "10/hour",  # 🔹 Custom rate for registration
+    },
 }
 
 MAILERS = {

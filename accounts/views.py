@@ -20,11 +20,15 @@ from .serializers import PasswordChangeSerializer
 from .serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.throttling import ScopedRateThrottle
 
 User = get_user_model()
 
 
 class RegisterView(APIView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "register"
+
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
 
@@ -114,6 +118,8 @@ class LoginView(TokenObtainPairView):
 
     # 🔗 Remember Section 01, §1.2.11: Swap the default serializer with our secure one
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
 
 class UserProfileView(RetrieveUpdateAPIView):
@@ -161,6 +167,9 @@ class PasswordChangeView(APIView):
 
 
 class PasswordResetRequestView(APIView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
+
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         if serializer.is_valid():
