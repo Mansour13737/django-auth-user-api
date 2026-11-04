@@ -1,30 +1,37 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomTokenObtainPairSerializer
-from rest_framework.generics import RetrieveUpdateAPIView
-from rest_framework.permissions import IsAuthenticated
-from .serializers import UserProfileSerializer
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
-from .serializers import PasswordChangeSerializer
-from .serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework.throttling import ScopedRateThrottle
+
+from drf_spectacular.utils import extend_schema
+
+from .serializers import (
+    RegisterSerializer,
+    CustomTokenObtainPairSerializer,
+    UserProfileSerializer,
+    PasswordChangeSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer,
+)
 
 User = get_user_model()
 
 
+@extend_schema(
+    summary="Register a new user",
+    description="Creates a new inactive user account and sends a verification email. Does not return tokens.",
+)
 class RegisterView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "register"
@@ -69,6 +76,10 @@ class RegisterView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Verify Email Address",
+    description="Takes the uid and token from the verification email link and activates the user account.",
+)
 class VerifyEmailView(APIView):
     def get(self, request):
         uidb64 = request.query_params.get("uid")
@@ -111,49 +122,53 @@ class VerifyEmailView(APIView):
             )
 
 
+@extend_schema(
+    summary="User Login",
+    description="Takes an email and password. Returns JWT access and refresh tokens if the user is verified and active.",
+)
 class LoginView(TokenObtainPairView):
     """
     Takes an email and password and returns a JWT access and refresh token.
     """
 
-    # 🔗 Remember Section 01, §1.2.11: Swap the default serializer with our secure one
     serializer_class = CustomTokenObtainPairSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
 
 
+@extend_schema(
+    summary="Get or Update User Profile",
+    description="Retrieves the authenticated user's profile. Allows updating full_name. Read-only fields like role cannot be changed.",
+)
 class UserProfileView(RetrieveUpdateAPIView):
     """
     View and update the authenticated user's profile.
     """
 
     serializer_class = UserProfileSerializer
-
-    # 🔗 Remember Section 01, §1.2.2: Authentication.
-    # This forces the user to send a valid Bearer Access Token in the headers.
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         """
         🔗 Remember Section 01, §1.2.13: Object-level permission.
-        We override this to ALWAYS return the profile of the user making the request.
-        This prevents User A from changing the ID in the URL to view User B's data.
         """
         return self.request.user
 
 
+@extend_schema(
+    summary="Change Password",
+    description="Allows an authenticated user to change their password by providing their old password and a new one.",
+)
 class PasswordChangeView(APIView):
     """
     Allow an authenticated user to change their password.
     """
 
-    # 🔗 Remember Section 01, §1.2.2: Only authenticated users can access this
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = PasswordChangeSerializer(
             data=request.data,
-            # 🔗 Remember Section 01, §1.2.11: We pass the request context so the serializer can access request.user
             context={"request": request},
         )
 
@@ -166,6 +181,10 @@ class PasswordChangeView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Request Password Reset",
+    description="Sends a password reset link to the provided email address. Always returns a generic message to prevent user enumeration.",
+)
 class PasswordResetRequestView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
@@ -175,7 +194,6 @@ class PasswordResetRequestView(APIView):
         if serializer.is_valid():
             email = serializer.validated_data["email"]
 
-            # 🔹 Check if user exists, but DO NOT reveal this to the client
             try:
                 user = User.objects.get(email=email)
 
@@ -187,7 +205,6 @@ class PasswordResetRequestView(APIView):
                     f"http://localhost:3000/reset-password?uid={uid}&token={token}"
                 )
 
-                # Print to terminal for easy testing
                 print(
                     f"\n--- COPY THIS LINK TO RESET ---\n{reset_link}\n-------------------------------\n"
                 )
@@ -200,9 +217,8 @@ class PasswordResetRequestView(APIView):
                     fail_silently=False,
                 )
             except User.DoesNotExist:
-                pass  # Do nothing. We don't want to leak that the email doesn't exist.
+                pass
 
-            # 🔗 Remember Section 01, §1.2.12: Always return the same generic message
             return Response(
                 {
                     "message": "If an account with that email exists, a password reset link has been sent."
@@ -213,12 +229,15 @@ class PasswordResetRequestView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Confirm Password Reset",
+    description="Takes the uid, token, and new password to reset the user's password. Token becomes invalid after use.",
+)
 class PasswordResetConfirmView(APIView):
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
 
         if serializer.is_valid():
-            # The serializer's save() method hashes the password and updates the user
             serializer.save()
             return Response(
                 {
@@ -230,17 +249,19 @@ class PasswordResetConfirmView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Logout User",
+    description="Blacklists the provided refresh token to log the user out. The short-lived access token will expire naturally.",
+)
 class LogoutView(APIView):
     """
     Blacklist the refresh token to log the user out.
     """
 
-    # 🔗 Remember Section 01, §1.2.2: Only logged-in users can log out
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
-            # 1. Get the refresh token from the request body
             refresh_token = request.data.get("refresh")
             if not refresh_token:
                 return Response(
@@ -248,19 +269,16 @@ class LogoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # 2. Instantiate the token and blacklist it
             # 🔗 Remember Section 01, §1.2.9: This adds the token to the BlacklistedToken table
             token = RefreshToken(refresh_token)
             token.blacklist()
 
-            # 🔗 Remember Section 01, Security Rule #9: 205 Reset Content is standard for logout
             return Response(
                 {"message": "Successfully logged out."},
                 status=status.HTTP_205_RESET_CONTENT,
             )
 
         except TokenError:
-            # 🔗 Remember Section 01, §1.2.15: Token is invalid, expired, or already blacklisted
             return Response(
                 {"error": "Invalid or expired token."},
                 status=status.HTTP_400_BAD_REQUEST,
