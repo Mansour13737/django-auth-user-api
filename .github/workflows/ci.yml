@@ -1,0 +1,57 @@
+name: Django CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # 🔗 Remember Section 02 & 14: Our tests need a PostgreSQL database!
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: auth_api_db
+          POSTGRES_USER: auth_user
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        # Wait for postgres to be ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+        cache: 'pip' # 🔹 Speeds up future runs
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Tests
+      # 🔗 Remember Sections 06-12: We run our 23 pytest tests here
+      env:
+        SECRET_KEY: "test-secret-key-for-ci"
+        DEBUG: "True"
+        ALLOWED_HOSTS: "localhost,127.0.0.1"
+        DB_NAME: auth_api_db
+        DB_USER: auth_user
+        DB_PASSWORD: testpassword
+        DB_HOST: localhost
+        DB_PORT: 5432
+      run: |
+        python -m pytest
