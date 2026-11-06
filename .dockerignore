@@ -1,0 +1,25 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment variables (Docker will inject them)
+.env
+
+# Git and IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Local DB and logs
+db.sqlite3
+*.log
+
+# Docs and tests (optional to exclude, but keeps image small)
+docs/
